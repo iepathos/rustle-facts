@@ -79,8 +79,7 @@ pub fn load_cache(path: &Path) -> Result<FactCache> {
             Ok(FactCache::new())
         }
         Err(e) => Err(FactsError::CacheError(format!(
-            "Failed to read cache file: {}",
-            e
+            "Failed to read cache file: {e}"
         ))),
     }
 }
@@ -88,15 +87,14 @@ pub fn load_cache(path: &Path) -> Result<FactCache> {
 pub fn save_cache(path: &Path, cache: &FactCache) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
-            FactsError::CacheError(format!("Failed to create cache directory: {}", e))
+            FactsError::CacheError(format!("Failed to create cache directory: {e}"))
         })?;
     }
 
     let json = serde_json::to_string_pretty(cache)?;
 
-    fs::write(path, json).map_err(|e| {
-        FactsError::CacheError(format!("Failed to write cache file: {}", e))
-    })?;
+    fs::write(path, json)
+        .map_err(|e| FactsError::CacheError(format!("Failed to write cache file: {e}")))?;
 
     #[cfg(unix)]
     {
@@ -182,7 +180,10 @@ mod tests {
         cache.update("host1".to_string(), facts.clone());
 
         assert!(cache.get("host1", 3600).is_some());
-        assert_eq!(cache.get("host1", 3600).unwrap().ansible_architecture, "x86_64");
+        assert_eq!(
+            cache.get("host1", 3600).unwrap().ansible_architecture,
+            "x86_64"
+        );
         assert!(cache.get("host2", 3600).is_none());
     }
 

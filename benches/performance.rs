@@ -15,9 +15,7 @@ DISTRIBUTION=ubuntu
 }
 
 fn bench_architecture_normalization(c: &mut Criterion) {
-    let architectures = vec![
-        "x86_64", "amd64", "aarch64", "arm64", "armv7l", "custom",
-    ];
+    let architectures = vec!["x86_64", "amd64", "aarch64", "arm64", "armv7l", "custom"];
 
     c.bench_function("normalize_architecture", |b| {
         b.iter(|| {
@@ -28,5 +26,9 @@ fn bench_architecture_normalization(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_parse_fact_output, bench_architecture_normalization);
+criterion_group!(
+    benches,
+    bench_parse_fact_output,
+    bench_architecture_normalization
+);
 criterion_main!(benches);

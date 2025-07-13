@@ -58,7 +58,7 @@ async fn test_localhost_facts() {
             }
         }
         Err(e) => {
-            eprintln!("Skipping localhost test due to error: {}", e);
+            eprintln!("Skipping localhost test due to error: {e}");
         }
     }
 }
@@ -78,17 +78,12 @@ async fn test_full_pipeline() {
         ..Default::default()
     };
 
-    let result = enrich_with_facts(
-        Cursor::new(input_json),
-        &mut output,
-        &config,
-    )
-    .await;
+    let result = enrich_with_facts(Cursor::new(input_json), &mut output, &config).await;
 
     match result {
         Ok(report) => {
             assert!(report.total_hosts > 0);
-            
+
             let output_str = String::from_utf8(output).unwrap();
             assert!(output_str.contains("host_facts"));
             assert!(output_str.contains("ansible_architecture"));
@@ -96,7 +91,7 @@ async fn test_full_pipeline() {
             assert!(cache_file.exists());
         }
         Err(e) => {
-            eprintln!("Pipeline test error (expected if no SSH access): {}", e);
+            eprintln!("Pipeline test error (expected if no SSH access): {e}");
         }
     }
 }
@@ -115,23 +110,13 @@ async fn test_cache_behavior() {
     };
 
     let mut output1 = Vec::new();
-    let result1 = enrich_with_facts(
-        Cursor::new(input_json),
-        &mut output1,
-        &config,
-    )
-    .await;
+    let result1 = enrich_with_facts(Cursor::new(input_json), &mut output1, &config).await;
 
     if result1.is_ok() {
         assert!(cache_file.exists());
 
         let mut output2 = Vec::new();
-        let result2 = enrich_with_facts(
-            Cursor::new(input_json),
-            &mut output2,
-            &config,
-        )
-        .await;
+        let result2 = enrich_with_facts(Cursor::new(input_json), &mut output2, &config).await;
 
         if let Ok(report2) = result2 {
             assert_eq!(report2.facts_gathered, 0);
@@ -159,8 +144,7 @@ fn test_architecture_normalization() {
         assert_eq!(
             ArchitectureFacts::normalize_architecture(input),
             expected,
-            "Failed to normalize {}",
-            input
+            "Failed to normalize {input}"
         );
     }
 }

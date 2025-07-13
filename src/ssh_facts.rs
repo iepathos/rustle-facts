@@ -25,9 +25,10 @@ pub async fn gather_minimal_facts(
         let sem = semaphore.clone();
 
         tasks.spawn(async move {
-            let _permit = sem.acquire().await.map_err(|e| {
-                FactsError::TaskJoin(format!("Failed to acquire semaphore: {}", e))
-            })?;
+            let _permit = sem
+                .acquire()
+                .await
+                .map_err(|e| FactsError::TaskJoin(format!("Failed to acquire semaphore: {e}")))?;
 
             match timeout(
                 Duration::from_secs(config.timeout),
@@ -98,11 +99,7 @@ async fn gather_single_host_facts(
     Ok((host.to_string(), facts))
 }
 
-async fn execute_ssh_command(
-    host: &str,
-    command: &str,
-    config: &FactsConfig,
-) -> Result<String> {
+async fn execute_ssh_command(host: &str, command: &str, config: &FactsConfig) -> Result<String> {
     let ssh_host = if host.contains('@') {
         host.to_string()
     } else {
@@ -157,7 +154,7 @@ async fn execute_ssh_command(
         let stderr_str = String::from_utf8_lossy(&stderr);
         return Err(FactsError::ConnectionFailed(
             host.to_string(),
-            format!("Command failed with exit status: {} - {}", status, stderr_str),
+            format!("Command failed with exit status: {status} - {stderr_str}"),
         ));
     }
 
@@ -211,9 +208,7 @@ pub fn parse_fact_output(output: &str) -> Result<ArchitectureFacts> {
 
     let system = facts
         .get("SYSTEM")
-        .ok_or_else(|| {
-            FactsError::ParseError("unknown".to_string(), "Missing SYSTEM".to_string())
-        })?
+        .ok_or_else(|| FactsError::ParseError("unknown".to_string(), "Missing SYSTEM".to_string()))?
         .clone();
 
     let os_family = facts
@@ -278,13 +273,19 @@ DISTRIBUTION=macos
 
     #[test]
     fn test_architecture_normalization() {
-        assert_eq!(ArchitectureFacts::normalize_architecture("x86_64"), "x86_64");
+        assert_eq!(
+            ArchitectureFacts::normalize_architecture("x86_64"),
+            "x86_64"
+        );
         assert_eq!(ArchitectureFacts::normalize_architecture("amd64"), "x86_64");
         assert_eq!(
             ArchitectureFacts::normalize_architecture("aarch64"),
             "aarch64"
         );
-        assert_eq!(ArchitectureFacts::normalize_architecture("arm64"), "aarch64");
+        assert_eq!(
+            ArchitectureFacts::normalize_architecture("arm64"),
+            "aarch64"
+        );
         assert_eq!(ArchitectureFacts::normalize_architecture("armv7l"), "armv7");
         assert_eq!(ArchitectureFacts::normalize_architecture("armhf"), "armv7");
         assert_eq!(

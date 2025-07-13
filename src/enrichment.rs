@@ -22,7 +22,7 @@ pub async fn enrich_with_facts<R: Read, W: Write>(
     input.read_to_end(&mut buffer)?;
 
     let parsed: ParsedPlaybook = serde_json::from_slice(&buffer)
-        .map_err(|e| FactsError::InvalidInventory(format!("Failed to parse input JSON: {}", e)))?;
+        .map_err(|e| FactsError::InvalidInventory(format!("Failed to parse input JSON: {e}")))?;
 
     let hosts = extract_unique_hosts(&parsed)?;
     info!("Found {} unique hosts in inventory", hosts.len());
@@ -37,12 +37,8 @@ pub async fn enrich_with_facts<R: Read, W: Write>(
         cache.cleanup_stale(config.cache_ttl);
     }
 
-    let hosts_needing_facts = filter_hosts_needing_facts(
-        &hosts,
-        &cache,
-        config.cache_ttl,
-        config.force_refresh,
-    );
+    let hosts_needing_facts =
+        filter_hosts_needing_facts(&hosts, &cache, config.cache_ttl, config.force_refresh);
 
     info!(
         "Need to gather facts for {} hosts (cache hits: {})",
@@ -80,7 +76,7 @@ pub async fn enrich_with_facts<R: Read, W: Write>(
 fn extract_unique_hosts(playbook: &ParsedPlaybook) -> Result<Vec<String>> {
     let mut hosts = Vec::new();
 
-    for (host, _) in &playbook.inventory.hosts {
+    for host in playbook.inventory.hosts.keys() {
         hosts.push(host.clone());
     }
 
@@ -114,16 +110,13 @@ fn build_enriched_playbook(
 ) -> Result<EnrichedPlaybook> {
     let mut host_facts = HashMap::new();
 
-    for (host, _) in &parsed.inventory.hosts {
+    for host in parsed.inventory.hosts.keys() {
         if let Some(facts) = new_facts.get(host) {
             host_facts.insert(host.clone(), facts.clone());
         } else if let Some(facts) = cache.get(host, cache_ttl) {
             host_facts.insert(host.clone(), facts.clone());
         } else {
-            warn!(
-                "No facts available for host {}, using fallback",
-                host
-            );
+            warn!("No facts available for host {}, using fallback", host);
             host_facts.insert(host.clone(), ArchitectureFacts::fallback());
         }
     }
@@ -174,7 +167,10 @@ mod tests {
         hosts.insert("db1".to_string(), serde_json::json!({}));
 
         let mut groups = HashMap::new();
-        groups.insert("webservers".to_string(), vec!["web1".to_string(), "web2".to_string()]);
+        groups.insert(
+            "webservers".to_string(),
+            vec!["web1".to_string(), "web2".to_string()],
+        );
         groups.insert("databases".to_string(), vec!["db1".to_string()]);
 
         ParsedPlaybook {
@@ -255,19 +251,21 @@ mod tests {
                 let output_str = String::from_utf8(output).unwrap();
                 // Parse as JSON value first to check structure
                 let json_value: serde_json::Value = serde_json::from_str(&output_str).unwrap();
-                
+
                 // Check the structure matches our expected format
                 assert!(json_value["inventory"]["hosts"].is_object());
                 assert!(json_value["inventory"]["host_facts"].is_object());
-                
+
                 // The enriched structure should have 3 hosts with fallback facts
                 let host_facts = json_value["inventory"]["host_facts"].as_object().unwrap();
                 assert_eq!(host_facts.len(), 3);
             }
             Err(e) => {
                 // This is expected if we can't connect to hosts
-                assert!(e.to_string().contains("No hosts found") || 
-                       e.to_string().contains("Connection failed"));
+                assert!(
+                    e.to_string().contains("No hosts found")
+                        || e.to_string().contains("Connection failed")
+                );
             }
         }
     }

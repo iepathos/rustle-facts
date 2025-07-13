@@ -47,8 +47,7 @@ fn init_logging(debug: bool) {
     let filter = if debug {
         EnvFilter::new("debug")
     } else {
-        EnvFilter::from_default_env()
-            .add_directive("rustle_facts=info".parse().unwrap())
+        EnvFilter::from_default_env().add_directive("rustle_facts=info".parse().unwrap())
     };
 
     tracing_subscriber::fmt()

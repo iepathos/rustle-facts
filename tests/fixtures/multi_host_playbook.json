@@ -1,0 +1,64 @@
+{
+  "metadata": {
+    "file_path": "playbooks/multi_host.yml",
+    "version": null,
+    "created_at": "2025-07-13T00:00:00Z",
+    "checksum": "abc123"
+  },
+  "plays": [
+    {
+      "name": "Configure web servers",
+      "hosts": "webservers",
+      "vars": {
+        "app_port": 8080
+      },
+      "tasks": [
+        {
+          "id": "task_0",
+          "name": "Install nginx",
+          "module": "package",
+          "args": {
+            "name": "nginx",
+            "state": "present"
+          },
+          "vars": {},
+          "when": null,
+          "loop_items": null,
+          "tags": ["packages"],
+          "notify": [],
+          "changed_when": null,
+          "failed_when": null,
+          "ignore_errors": false,
+          "delegate_to": null,
+          "dependencies": []
+        }
+      ],
+      "handlers": [],
+      "roles": [],
+      "strategy": "linear",
+      "serial": null,
+      "max_fail_percentage": null
+    }
+  ],
+  "variables": {},
+  "facts_required": true,
+  "vault_ids": [],
+  "inventory": {
+    "hosts": {
+      "web1.example.com": {
+        "ansible_host": "192.168.1.10"
+      },
+      "web2.example.com": {
+        "ansible_host": "192.168.1.11"
+      },
+      "db1.example.com": {
+        "ansible_host": "192.168.1.20"
+      }
+    },
+    "groups": {
+      "webservers": ["web1.example.com", "web2.example.com"],
+      "databases": ["db1.example.com"]
+    },
+    "host_vars": {}
+  }
+}

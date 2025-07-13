@@ -1,0 +1,47 @@
+{
+  "metadata": {
+    "name": "Test Playbook",
+    "version": "1.0",
+    "parsed_at": "2024-01-01T00:00:00Z"
+  },
+  "plays": [
+    {
+      "name": "Configure web servers",
+      "hosts": "webservers",
+      "tasks": [
+        {
+          "name": "Install nginx",
+          "package": {
+            "name": "nginx",
+            "state": "present"
+          }
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "app_name": "test-app",
+    "port": 8080
+  },
+  "facts_required": true,
+  "vault_ids": [],
+  "inventory": {
+    "hosts": {
+      "web1.example.com": {
+        "ansible_host": "192.168.1.10"
+      },
+      "web2.example.com": {
+        "ansible_host": "192.168.1.11"
+      },
+      "db1.example.com": {
+        "ansible_host": "192.168.1.20"
+      }
+    },
+    "groups": {
+      "webservers": ["web1.example.com", "web2.example.com"],
+      "databases": ["db1.example.com"],
+      "all": ["web1.example.com", "web2.example.com", "db1.example.com"]
+    },
+    "host_vars": {}
+  }
+}

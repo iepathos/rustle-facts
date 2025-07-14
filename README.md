@@ -1,72 +1,102 @@
-# Rust Claude Code Starter Template
+# rustle-facts
 
-A comprehensive starter template for Rust projects optimized for development with Claude Code. This template provides a solid foundation with best practices, tooling configurations, and development guidelines for building robust Rust applications.
+Architecture detection tool for Rustle - a high-performance modular reimplementation of Ansible in Rust. This tool enriches parsed Ansible playbook data with target host architecture and OS information for cross-compilation decisions.
+
+## 🎯 Overview
+
+`rustle-facts` is a critical component in the Rustle pipeline that bridges parsed Ansible playbooks with execution planning:
+
+```
+rustle-parse → rustle-facts → rustle-plan → rustle-deploy/exec
+```
+
+Unlike Ansible's full fact gathering, rustle-facts performs minimal SSH operations to collect only essential information needed for cross-compilation and execution planning.
 
 ## 🚀 Quick Start
 
-1. **Clone this template**
+1. **Installation**
    ```bash
-   git clone https://github.com/iepathos/rust-claude-code.git rustle-facts
-   cd rustle-facts
+   cargo install --path .
    ```
 
-2. **Initialize your project**
+2. **Basic Usage**
    ```bash
-   # Remove template git history
-   rm -rf .git
-   git init
+   # Process parsed playbook data
+   rustle-parse playbook.yml | rustle-facts | rustle-plan
    
-   # Create initial Cargo.toml
-   cargo init --name my-project
+   # With custom parallelism
+   rustle-parse playbook.yml | rustle-facts --parallelism 50
+   
+   # With verbose logging
+   RUST_LOG=debug rustle-facts < parsed_playbook.json
    ```
 
-3. **Install development dependencies**
+3. **Example Pipeline**
    ```bash
-   # Install rustfmt and clippy
-   rustup component add rustfmt clippy
-   
-   # Install cargo-watch for development
-   cargo install cargo-watch
-   
-   # Install additional tools (optional)
-   cargo install cargo-tarpaulin  # Code coverage
-   cargo install cargo-audit      # Security audits
-   cargo install cargo-outdated   # Dependency updates
+   # Full Rustle pipeline example
+   cat inventory.yml playbook.yml | \
+     rustle-parse | \
+     rustle-facts | \
+     rustle-plan | \
+     rustle-exec
    ```
+
+## ✨ Features
+
+- **Stream Processing**: Accepts parsed JSON from stdin and outputs enriched JSON to stdout
+- **Intelligent Caching**: Persistent cache of architecture facts with configurable TTL
+- **Parallel Processing**: Handles multiple hosts concurrently (default: 20 connections)
+- **Local Host Detection**: Automatically detects localhost and uses direct system detection
+- **Graceful Fallbacks**: Provides fallback facts when hosts are unreachable
+- **Performance Optimized**: Completes fact gathering for 100 hosts in under 5 seconds
+
+## 📦 What Facts Are Gathered
+
+`rustle-facts` collects minimal but essential information:
+
+- **Architecture**: x86_64, aarch64, arm64, etc.
+- **Operating System**: Linux, Darwin, Windows
+- **OS Family**: RedHat, Debian, Alpine, etc.
+- **Distribution**: Ubuntu, CentOS, Fedora, etc.
+- **Distribution Version**: 22.04, 8.5, etc.
 
 ## 📁 Project Structure
 
 ```
 rustle-facts/
-├── src/                    # Source code
-│   ├── main.rs            # Binary entry point
-│   ├── lib.rs             # Library entry point
-│   └── modules/           # Application modules
+├── src/
+│   ├── main.rs            # CLI entry point
+│   ├── enrichment.rs      # Core enrichment logic
+│   ├── ssh_facts.rs       # SSH-based fact gathering
+│   ├── cache.rs           # Caching implementation
+│   ├── types.rs           # Shared type definitions
+│   ├── config.rs          # Configuration handling
+│   └── error.rs           # Error types
 ├── tests/                 # Integration tests
-├── benches/               # Benchmarks
-├── examples/              # Usage examples
 ├── docs/                  # Documentation
-├── .gitignore             # Git ignore rules
-├── CLAUDE.md              # Claude Code guidelines
-├── Cargo.toml             # Project manifest
-└── README.md              # This file
+│   └── spec/             # Specifications
+├── examples/             # Example JSON files
+├── .gitignore            # Git ignore rules
+├── CLAUDE.md             # Claude Code guidelines
+├── Cargo.toml            # Project manifest
+└── README.md             # This file
 ```
 
-## 🛠️ Development Workflow
+## 🛠️ Development
 
-### Running the project
+### Building
 ```bash
-# Build and run
-cargo run
+# Debug build
+cargo build
 
-# Run with hot reloading
-cargo watch -x run
+# Release build
+cargo build --release
 
 # Run tests
 cargo test
 
-# Run with all features
-cargo run --all-features
+# Run with example data
+cargo run < examples/file_operations.json
 ```
 
 ### Code Quality
@@ -84,154 +114,164 @@ cargo check
 cargo audit
 ```
 
-### Testing
+### Testing with Real Data
 ```bash
-# Run all tests
-cargo test
+# Test with localhost
+echo '{"inventory": {"all": {"hosts": {"localhost": {}}}}, "plays": []}' | cargo run
 
-# Run tests with output
-cargo test -- --nocapture
+# Test with remote hosts
+rustle-parse inventory.yml playbook.yml | cargo run
 
-# Run specific test
-cargo test test_name
-
-# Generate code coverage
-cargo tarpaulin --out Html
+# Test with custom configuration
+RUSTLE_FACTS_CACHE_TTL=3600 cargo run < parsed_data.json
 ```
 
-## 🤖 Claude Code Integration
-
-This template includes a comprehensive `CLAUDE.md` file that provides:
-
-- **Architecture guidelines**: Error handling, concurrency patterns, and configuration management
-- **Code style standards**: Documentation, logging, and testing requirements
-- **Development patterns**: Best practices and anti-patterns specific to Rust
-- **Example prompts**: How to effectively communicate with Claude for various tasks
-
-### Key Features for Claude Development
-
-1. **Structured Error Handling**
-   - Uses `Result<T, E>` types consistently
-   - Includes examples with `anyhow` and `thiserror`
-
-2. **Async/Await Support**
-   - Pre-configured for `tokio` runtime
-   - Examples for concurrent operations
-
-3. **Comprehensive Testing**
-   - Unit test templates
-   - Property-based testing with `proptest`
-   - Integration test structure
-
-4. **Documentation Standards**
-   - Rustdoc comment templates
-   - Example-driven documentation
-
-## 📦 Recommended Dependencies
-
-Add these to your `Cargo.toml` as needed:
-
-```toml
-[dependencies]
-# Async runtime
-tokio = { version = "1", features = ["full"] }
-
-# Error handling
-anyhow = "1"
-thiserror = "1"
-
-# Serialization
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-
-# Logging
-tracing = "0.1"
-tracing-subscriber = "0.3"
-
-# CLI
-clap = { version = "4", features = ["derive"] }
-
-# HTTP client
-reqwest = { version = "0.11", features = ["json"] }
-
-[dev-dependencies]
-# Testing
-proptest = "1"
-mockall = "0.11"
-criterion = "0.5"
-tempfile = "3"
-```
-
-## 🔧 Configuration
+## ⚙️ Configuration
 
 ### Environment Variables
 
-Create a `.env` file for local development:
+```bash
+# Logging level
+RUST_LOG=info
 
-```env
-# Application settings
-RUST_LOG=debug
-DATABASE_URL=postgresql://localhost/myapp
-API_KEY=your_api_key_here
+# Cache configuration
+RUSTLE_FACTS_CACHE_TTL=1800        # Cache TTL in seconds (default: 30 minutes)
+RUSTLE_FACTS_CACHE_DIR=~/.cache    # Cache directory location
+
+# Connection settings
+RUSTLE_FACTS_PARALLELISM=20        # Max concurrent SSH connections
+RUSTLE_FACTS_TIMEOUT=10            # SSH connection timeout in seconds
 ```
 
-### VS Code Settings
-
-Recommended `.vscode/settings.json`:
-
-```json
-{
-    "rust-analyzer.cargo.features": ["all"],
-    "rust-analyzer.checkOnSave.command": "clippy",
-    "editor.formatOnSave": true,
-    "[rust]": {
-        "editor.defaultFormatter": "rust-lang.rust-analyzer"
-    }
-}
-```
-
-## 🚀 Building for Production
+### Command Line Options
 
 ```bash
-# Build release version
+rustle-facts --help
+
+Options:
+  -p, --parallelism <N>    Maximum parallel SSH connections [default: 20]
+  -v, --verbose            Enable verbose logging
+  -h, --help               Print help
+  -V, --version            Print version
+```
+
+## 📊 Performance
+
+`rustle-facts` is designed for high performance:
+
+- **100 hosts**: < 5 seconds
+- **1000 hosts**: < 30 seconds (with default parallelism)
+- **Cache hits**: < 100ms for any number of hosts
+
+### Performance Tuning
+
+```bash
+# Increase parallelism for large deployments
+rustle-facts --parallelism 100
+
+# Use release build for production
 cargo build --release
 
-# Run release version
-cargo run --release
-
-# Create optimized binary
+# Enable CPU-specific optimizations
 RUSTFLAGS="-C target-cpu=native" cargo build --release
 ```
 
-## 📚 Learning Resources
+## 🔍 Troubleshooting
 
-- [The Rust Programming Language Book](https://doc.rust-lang.org/book/)
-- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
-- [Async Programming in Rust](https://rust-lang.github.io/async-book/)
-- [The Rustonomicon](https://doc.rust-lang.org/nomicon/)
+### Common Issues
 
-## 🤝 Contributing
+1. **SSH Connection Failures**
+   ```bash
+   # Check SSH connectivity
+   ssh user@host "uname -a"
+   
+   # Increase timeout for slow connections
+   RUSTLE_FACTS_TIMEOUT=30 rustle-facts
+   ```
 
-When contributing to this template:
+2. **Cache Issues**
+   ```bash
+   # Clear cache
+   rm -rf ~/.cache/rustle-facts
+   
+   # Disable cache temporarily
+   RUSTLE_FACTS_CACHE_TTL=0 rustle-facts
+   ```
 
-1. Follow the guidelines in `CLAUDE.md`
-2. Ensure all tests pass: `cargo test`
-3. Run formatters: `cargo fmt`
-4. Check lints: `cargo clippy`
-5. Update documentation as needed
+3. **Performance Problems**
+   ```bash
+   # Enable debug logging
+   RUST_LOG=debug rustle-facts
+   
+   # Check for bottlenecks
+   RUST_LOG=trace rustle-facts 2>&1 | grep "SSH operation"
+   ```
+
+## 🏗️ Architecture
+
+`rustle-facts` follows a modular architecture:
+
+```mermaid
+graph LR
+    A[Parsed JSON] --> B[Enrichment Engine]
+    B --> C[Cache Check]
+    C --> D{Cache Hit?}
+    D -->|Yes| E[Return Cached]
+    D -->|No| F[SSH Facts Gatherer]
+    F --> G[Update Cache]
+    G --> E
+    E --> H[Enriched JSON Output]
+```
+
+## 🤝 Integration with Rustle Ecosystem
+
+### Input Format
+
+Expects JSON from `rustle-parse`:
+
+```json
+{
+  "inventory": {
+    "all": {
+      "hosts": {
+        "web1": {"ansible_host": "192.168.1.10"},
+        "db1": {"ansible_host": "192.168.1.20"}
+      }
+    }
+  },
+  "plays": [...]
+}
+```
+
+### Output Format
+
+Produces enriched JSON for `rustle-plan`:
+
+```json
+{
+  "inventory": {
+    "all": {
+      "hosts": {
+        "web1": {
+          "ansible_host": "192.168.1.10",
+          "ansible_architecture": "x86_64",
+          "ansible_os_family": "Debian",
+          "ansible_distribution": "Ubuntu"
+        }
+      }
+    }
+  },
+  "plays": [...]
+}
+```
 
 ## 📝 License
 
-This template is provided as-is for use in your own projects. Customize the license as needed for your specific use case.
+Part of the Rustle project. See LICENSE for details.
 
----
+## 🔗 Related Projects
 
-## 🎯 Next Steps
-
-1. **Customize `Cargo.toml`** with your project details
-2. **Update this README** with project-specific information
-3. **Review `CLAUDE.md`** for development guidelines
-4. **Set up CI/CD** with GitHub Actions or similar
-5. **Start building** your Rust application!
-
-Happy coding with Rust and Claude! 🦀🤖
+- [rustle-parse](https://github.com/memento-mori/rustle-parse) - YAML parser for Ansible playbooks
+- [rustle-plan](https://github.com/memento-mori/rustle-plan) - Execution planner
+- [rustle-exec](https://github.com/memento-mori/rustle-exec) - Task executor
+- [rustle-deploy](https://github.com/memento-mori/rustle-deploy) - Deployment engine

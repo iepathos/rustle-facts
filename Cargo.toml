@@ -2,10 +2,10 @@
 name = "rustle-facts"
 version = "0.1.0"
 edition = "2021"
-authors = ["Rustle Contributors"]
+authors = ["Glen Baker iepathos@gmail.com"]
 description = "Architecture detection tool for Rustle binary compilation"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/rustle/rustle-facts"
+license = "GPL-3.0"
+repository = "https://github.com/iepathos/rustle-facts"
 keywords = ["ansible", "configuration", "ssh", "facts", "architecture"]
 categories = ["command-line-utilities", "development-tools"]
 

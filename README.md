@@ -271,7 +271,7 @@ Part of the Rustle project. See LICENSE for details.
 
 ## 🔗 Related Projects
 
-- [rustle-parse](https://github.com/memento-mori/rustle-parse) - YAML parser for Ansible playbooks
-- [rustle-plan](https://github.com/memento-mori/rustle-plan) - Execution planner
-- [rustle-exec](https://github.com/memento-mori/rustle-exec) - Task executor
-- [rustle-deploy](https://github.com/memento-mori/rustle-deploy) - Deployment engine
+- [rustle-parse](https://github.com/iepathos/rustle-parse) - YAML parser for Ansible playbooks
+- [rustle-plan](https://github.com/iepathos/rustle-plan) - Execution planner
+- [rustle-exec](https://github.com/iepathos/rustle-exec) - Task executor
+- [rustle-deploy](https://github.com/iepathos/rustle-deploy) - Deployment engine

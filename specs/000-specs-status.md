@@ -15,6 +15,7 @@ This document tracks the status of all specification documents in the Rustle-Fac
 | Spec # | Feature | Status |
 |--------|---------|--------|
 | 010 | Architecture Detection Tool | ⬜ Planned |
+| 020 | Enhanced SSH Configuration | ⬜ Planned |
 
 ## Status Indicators
 

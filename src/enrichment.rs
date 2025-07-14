@@ -4,7 +4,7 @@ use crate::error::{FactsError, Result};
 use crate::ssh_facts::gather_minimal_facts;
 use crate::types::{
     ArchitectureFacts, EnrichedInventory, EnrichedPlaybook, EnrichmentReport, FactCache,
-    ParsedPlaybook,
+    ParsedPlaybook, InventoryHosts, InventoryGroups,
 };
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -76,15 +76,41 @@ pub async fn enrich_with_facts<R: Read, W: Write>(
 fn extract_unique_hosts(playbook: &ParsedPlaybook) -> Result<Vec<String>> {
     let mut hosts = Vec::new();
 
-    for host in playbook.inventory.hosts.keys() {
-        hosts.push(host.clone());
+    // Extract hosts from the hosts section
+    match &playbook.inventory.hosts {
+        InventoryHosts::Simple(simple_hosts) => {
+            for host in simple_hosts.keys() {
+                hosts.push(host.clone());
+            }
+        }
+        InventoryHosts::Detailed(detailed_hosts) => {
+            for host in detailed_hosts.keys() {
+                hosts.push(host.clone());
+            }
+        }
     }
 
-    for (group_name, group_hosts) in &playbook.inventory.groups {
-        if group_name != "all" && group_name != "ungrouped" {
-            for host in group_hosts {
-                if !hosts.contains(host) {
-                    hosts.push(host.clone());
+    // Extract hosts from the groups section
+    match &playbook.inventory.groups {
+        InventoryGroups::Simple(simple_groups) => {
+            for (group_name, group_hosts) in simple_groups {
+                if group_name != "all" && group_name != "ungrouped" {
+                    for host in group_hosts {
+                        if !hosts.contains(host) {
+                            hosts.push(host.clone());
+                        }
+                    }
+                }
+            }
+        }
+        InventoryGroups::Detailed(detailed_groups) => {
+            for (group_name, group_entry) in detailed_groups {
+                if group_name != "all" && group_name != "ungrouped" {
+                    for host in &group_entry.hosts {
+                        if !hosts.contains(host) {
+                            hosts.push(host.clone());
+                        }
+                    }
                 }
             }
         }
@@ -102,6 +128,22 @@ fn extract_unique_hosts(playbook: &ParsedPlaybook) -> Result<Vec<String>> {
     Ok(hosts)
 }
 
+fn get_host_vars(parsed_inventory: &crate::types::ParsedInventory, hostname: &str) -> HashMap<String, serde_json::Value> {
+    match &parsed_inventory.hosts {
+        InventoryHosts::Simple(simple_hosts) => {
+            simple_hosts.get(hostname)
+                .and_then(|v| v.as_object())
+                .map(|obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+                .unwrap_or_default()
+        }
+        InventoryHosts::Detailed(detailed_hosts) => {
+            detailed_hosts.get(hostname)
+                .map(|host_entry| host_entry.vars.clone())
+                .unwrap_or_default()
+        }
+    }
+}
+
 fn build_enriched_playbook(
     mut parsed: ParsedPlaybook,
     cache: &FactCache,
@@ -110,31 +152,81 @@ fn build_enriched_playbook(
 ) -> Result<EnrichedPlaybook> {
     let mut host_facts = HashMap::new();
 
-    for host in parsed.inventory.hosts.keys() {
+    // Get all host names from inventory
+    let host_names: Vec<String> = match &parsed.inventory.hosts {
+        InventoryHosts::Simple(simple_hosts) => simple_hosts.keys().cloned().collect(),
+        InventoryHosts::Detailed(detailed_hosts) => detailed_hosts.keys().cloned().collect(),
+    };
+
+    for host in &host_names {
         if let Some(facts) = new_facts.get(host) {
             host_facts.insert(host.clone(), facts.clone());
         } else if let Some(facts) = cache.get(host, cache_ttl) {
             host_facts.insert(host.clone(), facts.clone());
         } else {
-            warn!("No facts available for host {}, using fallback", host);
-            host_facts.insert(host.clone(), ArchitectureFacts::fallback());
+            let host_vars = get_host_vars(&parsed.inventory, host);
+            if ArchitectureFacts::should_use_local_detection(host, &host_vars) {
+                info!("Using local system detection for host {}", host);
+                host_facts.insert(host.clone(), ArchitectureFacts::from_local_system());
+            } else {
+                warn!("No facts available for host {}, using fallback", host);
+                host_facts.insert(host.clone(), ArchitectureFacts::fallback());
+            }
         }
     }
 
-    for (group_name, group_hosts) in &parsed.inventory.groups {
-        if group_name != "all" && group_name != "ungrouped" {
-            for host in group_hosts {
-                if !host_facts.contains_key(host) {
-                    if let Some(facts) = new_facts.get(host) {
-                        host_facts.insert(host.clone(), facts.clone());
-                    } else if let Some(facts) = cache.get(host, cache_ttl) {
-                        host_facts.insert(host.clone(), facts.clone());
-                    } else {
-                        warn!(
-                            "No facts available for host {} in group {}, using fallback",
-                            host, group_name
-                        );
-                        host_facts.insert(host.clone(), ArchitectureFacts::fallback());
+    // Process groups based on format
+    match &parsed.inventory.groups {
+        InventoryGroups::Simple(simple_groups) => {
+            for (group_name, group_hosts) in simple_groups {
+                if group_name != "all" && group_name != "ungrouped" {
+                    for host in group_hosts {
+                        if !host_facts.contains_key(host) {
+                            if let Some(facts) = new_facts.get(host) {
+                                host_facts.insert(host.clone(), facts.clone());
+                            } else if let Some(facts) = cache.get(host, cache_ttl) {
+                                host_facts.insert(host.clone(), facts.clone());
+                            } else {
+                                let host_vars = get_host_vars(&parsed.inventory, host);
+                                if ArchitectureFacts::should_use_local_detection(host, &host_vars) {
+                                    info!("Using local system detection for host {} in group {}", host, group_name);
+                                    host_facts.insert(host.clone(), ArchitectureFacts::from_local_system());
+                                } else {
+                                    warn!(
+                                        "No facts available for host {} in group {}, using fallback",
+                                        host, group_name
+                                    );
+                                    host_facts.insert(host.clone(), ArchitectureFacts::fallback());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        InventoryGroups::Detailed(detailed_groups) => {
+            for (group_name, group_entry) in detailed_groups {
+                if group_name != "all" && group_name != "ungrouped" {
+                    for host in &group_entry.hosts {
+                        if !host_facts.contains_key(host) {
+                            if let Some(facts) = new_facts.get(host) {
+                                host_facts.insert(host.clone(), facts.clone());
+                            } else if let Some(facts) = cache.get(host, cache_ttl) {
+                                host_facts.insert(host.clone(), facts.clone());
+                            } else {
+                                let host_vars = get_host_vars(&parsed.inventory, host);
+                                if ArchitectureFacts::should_use_local_detection(host, &host_vars) {
+                                    info!("Using local system detection for host {} in group {}", host, group_name);
+                                    host_facts.insert(host.clone(), ArchitectureFacts::from_local_system());
+                                } else {
+                                    warn!(
+                                        "No facts available for host {} in group {}, using fallback",
+                                        host, group_name
+                                    );
+                                    host_facts.insert(host.clone(), ArchitectureFacts::fallback());
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -157,7 +249,7 @@ fn build_enriched_playbook(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{ParsedInventory, PlaybookMetadata};
+    use crate::types::{ParsedInventory, PlaybookMetadata, InventoryHosts, InventoryGroups};
     use std::io::Cursor;
 
     fn create_test_playbook() -> ParsedPlaybook {
@@ -187,9 +279,10 @@ mod tests {
             facts_required: true,
             vault_ids: vec![],
             inventory: ParsedInventory {
-                hosts,
-                groups,
+                hosts: InventoryHosts::Simple(hosts),
+                groups: InventoryGroups::Simple(groups),
                 host_vars: HashMap::new(),
+                variables: None,
             },
         }
     }
@@ -221,9 +314,10 @@ mod tests {
             facts_required: true,
             vault_ids: vec![],
             inventory: ParsedInventory {
-                hosts: HashMap::new(),
-                groups: HashMap::new(),
+                hosts: InventoryHosts::Simple(HashMap::new()),
+                groups: InventoryGroups::Simple(HashMap::new()),
                 host_vars: HashMap::new(),
+                variables: None,
             },
         };
 

@@ -76,7 +76,12 @@ pub async fn gather_minimal_facts(
             failed_hosts.len()
         );
         for host in failed_hosts {
-            results.insert(host, ArchitectureFacts::fallback());
+            if ArchitectureFacts::is_localhost(&host) {
+                info!("Using local system detection for failed localhost connection");
+                results.insert(host, ArchitectureFacts::from_local_system());
+            } else {
+                results.insert(host, ArchitectureFacts::fallback());
+            }
         }
     }
 

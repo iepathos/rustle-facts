@@ -19,6 +19,29 @@ impl ArchitectureFacts {
         }
     }
 
+    pub fn from_local_system() -> Self {
+        let architecture = match std::env::consts::ARCH {
+            "x86_64" => "x86_64".to_string(),
+            "aarch64" => "aarch64".to_string(),
+            "arm" => "armv7".to_string(),
+            arch => arch.to_string(),
+        };
+
+        let (system, os_family, distribution) = match std::env::consts::OS {
+            "macos" => ("Darwin".to_string(), "darwin".to_string(), Some("macOS".to_string())),
+            "linux" => ("Linux".to_string(), "debian".to_string(), None), // Default to debian family
+            "windows" => ("Windows".to_string(), "windows".to_string(), None),
+            os => (os.to_string(), "unknown".to_string(), None),
+        };
+
+        Self {
+            ansible_architecture: architecture,
+            ansible_system: system,
+            ansible_os_family: os_family,
+            ansible_distribution: distribution,
+        }
+    }
+
     pub fn normalize_architecture(arch: &str) -> String {
         match arch.to_lowercase().as_str() {
             "x86_64" | "amd64" => "x86_64".to_string(),
@@ -26,6 +49,19 @@ impl ArchitectureFacts {
             "armv7l" | "armhf" => "armv7".to_string(),
             _ => arch.to_string(),
         }
+    }
+
+    pub fn is_localhost(hostname: &str) -> bool {
+        matches!(hostname, "localhost" | "127.0.0.1" | "::1")
+    }
+
+    pub fn should_use_local_detection(hostname: &str, host_vars: &std::collections::HashMap<String, serde_json::Value>) -> bool {
+        // Use local detection if it's localhost or if ansible_connection is local
+        Self::is_localhost(hostname) || 
+        host_vars.get("ansible_connection")
+            .and_then(|v| v.as_str())
+            .map(|s| s == "local")
+            .unwrap_or(false)
     }
 }
 
@@ -71,11 +107,45 @@ pub struct ParsedPlay {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HostEntry {
+    pub name: String,
+    pub address: Option<String>,
+    pub port: Option<u16>,
+    pub user: Option<String>,
+    pub vars: HashMap<String, serde_json::Value>,
+    pub groups: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupEntry {
+    pub name: String,
+    pub hosts: Vec<String>,
+    pub children: Vec<String>,
+    pub vars: HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum InventoryHosts {
+    Simple(HashMap<String, serde_json::Value>),
+    Detailed(HashMap<String, HostEntry>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum InventoryGroups {
+    Simple(HashMap<String, Vec<String>>),
+    Detailed(HashMap<String, GroupEntry>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedInventory {
-    pub hosts: HashMap<String, serde_json::Value>,
-    pub groups: HashMap<String, Vec<String>>,
+    pub hosts: InventoryHosts,
+    pub groups: InventoryGroups,
     #[serde(default)]
     pub host_vars: HashMap<String, HashMap<String, serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variables: Option<HashMap<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

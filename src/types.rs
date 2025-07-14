@@ -28,7 +28,11 @@ impl ArchitectureFacts {
         };
 
         let (system, os_family, distribution) = match std::env::consts::OS {
-            "macos" => ("Darwin".to_string(), "darwin".to_string(), Some("macOS".to_string())),
+            "macos" => (
+                "Darwin".to_string(),
+                "darwin".to_string(),
+                Some("macOS".to_string()),
+            ),
             "linux" => ("Linux".to_string(), "debian".to_string(), None), // Default to debian family
             "windows" => ("Windows".to_string(), "windows".to_string(), None),
             os => (os.to_string(), "unknown".to_string(), None),
@@ -55,13 +59,17 @@ impl ArchitectureFacts {
         matches!(hostname, "localhost" | "127.0.0.1" | "::1")
     }
 
-    pub fn should_use_local_detection(hostname: &str, host_vars: &std::collections::HashMap<String, serde_json::Value>) -> bool {
+    pub fn should_use_local_detection(
+        hostname: &str,
+        host_vars: &std::collections::HashMap<String, serde_json::Value>,
+    ) -> bool {
         // Use local detection if it's localhost or if ansible_connection is local
-        Self::is_localhost(hostname) || 
-        host_vars.get("ansible_connection")
-            .and_then(|v| v.as_str())
-            .map(|s| s == "local")
-            .unwrap_or(false)
+        Self::is_localhost(hostname)
+            || host_vars
+                .get("ansible_connection")
+                .and_then(|v| v.as_str())
+                .map(|s| s == "local")
+                .unwrap_or(false)
     }
 }
 
@@ -114,6 +122,16 @@ pub struct HostEntry {
     pub user: Option<String>,
     pub vars: HashMap<String, serde_json::Value>,
     pub groups: Vec<String>,
+    pub connection: Option<String>,
+    pub ssh_private_key_file: Option<String>,
+    pub ssh_common_args: Option<String>,
+    pub ssh_extra_args: Option<String>,
+    pub ssh_pipelining: Option<bool>,
+    pub connection_timeout: Option<u32>,
+    pub ansible_become: Option<bool>,
+    pub become_method: Option<String>,
+    pub become_user: Option<String>,
+    pub become_flags: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,9 +161,7 @@ pub struct ParsedInventory {
     pub hosts: InventoryHosts,
     pub groups: InventoryGroups,
     #[serde(default)]
-    pub host_vars: HashMap<String, HashMap<String, serde_json::Value>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub variables: Option<HashMap<String, serde_json::Value>>,
+    pub variables: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -167,8 +183,11 @@ pub struct EnrichedInventory {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EnrichedPlaybook {
-    #[serde(flatten)]
-    pub playbook: ParsedPlaybook,
+    pub metadata: PlaybookMetadata,
+    pub plays: Vec<ParsedPlay>,
+    pub variables: HashMap<String, serde_json::Value>,
+    pub facts_required: bool,
+    pub vault_ids: Vec<String>,
     pub inventory: EnrichedInventory,
 }
 

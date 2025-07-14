@@ -28,20 +28,20 @@ async fn test_real_rustle_parse_output() {
             let enriched: EnrichedPlaybook = serde_json::from_str(&output_str).unwrap();
 
             assert_eq!(
-                enriched.playbook.metadata.file_path,
+                enriched.metadata.file_path,
                 Some("tests/fixtures/playbooks/file_operations_playbook.yml".to_string())
             );
 
-            assert_eq!(enriched.playbook.plays.len(), 1);
-            assert_eq!(enriched.playbook.plays[0].hosts, "all");
-            assert_eq!(enriched.playbook.plays[0].tasks.len(), 5);
+            assert_eq!(enriched.plays.len(), 1);
+            assert_eq!(enriched.plays[0].hosts, "all");
+            assert_eq!(enriched.plays[0].tasks.len(), 5);
 
-            assert_eq!(enriched.playbook.plays[0].tasks[0].module, "file");
-            assert_eq!(enriched.playbook.plays[0].tasks[1].module, "file");
-            assert_eq!(enriched.playbook.plays[0].tasks[2].module, "copy");
+            assert_eq!(enriched.plays[0].tasks[0].module, "file");
+            assert_eq!(enriched.plays[0].tasks[1].module, "file");
+            assert_eq!(enriched.plays[0].tasks[2].module, "copy");
 
             assert_eq!(
-                enriched.playbook.plays[0].tasks[4].when,
+                enriched.plays[0].tasks[4].when,
                 Some("ansible_system != \"Windows\"".to_string())
             );
 

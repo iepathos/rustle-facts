@@ -1,7 +1,7 @@
 use clap::Parser;
 use rustle_facts::{enrich_with_facts, CliArgs, EnrichmentReport, FactsConfig};
 use std::fs::File;
-use std::io::{self, IsTerminal, BufReader};
+use std::io::{self, BufReader, IsTerminal};
 use std::process;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
@@ -40,13 +40,15 @@ async fn main() {
     }
 }
 
-async fn run_enrichment(config: FactsConfig, input_file: Option<std::path::PathBuf>) -> Result<EnrichmentReport, rustle_facts::FactsError> {
+async fn run_enrichment(
+    config: FactsConfig,
+    input_file: Option<std::path::PathBuf>,
+) -> Result<EnrichmentReport, rustle_facts::FactsError> {
     let stdout = io::stdout();
 
     match input_file {
         Some(file_path) => {
-            let file = File::open(&file_path)
-                .map_err(|e| rustle_facts::FactsError::Io(e))?;
+            let file = File::open(&file_path).map_err(rustle_facts::FactsError::Io)?;
             let reader = BufReader::new(file);
             enrich_with_facts(reader, stdout.lock(), &config).await
         }

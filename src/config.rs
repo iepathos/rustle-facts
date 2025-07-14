@@ -49,7 +49,10 @@ pub struct CliArgs {
     #[arg(long, help = "Enable debug logging")]
     pub debug: bool,
 
-    #[arg(value_name = "FILE", help = "Input JSON file (use stdin if not provided)")]
+    #[arg(
+        value_name = "FILE",
+        help = "Input JSON file (use stdin if not provided)"
+    )]
     pub input: Option<PathBuf>,
 }
 

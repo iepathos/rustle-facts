@@ -4,7 +4,7 @@ use crate::error::{FactsError, Result};
 use crate::ssh_facts::gather_minimal_facts;
 use crate::types::{
     ArchitectureFacts, EnrichedInventory, EnrichedPlaybook, EnrichmentReport, FactCache,
-    ParsedPlaybook, InventoryHosts, InventoryGroups,
+    InventoryGroups, InventoryHosts, ParsedPlaybook,
 };
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -43,7 +43,11 @@ pub async fn enrich_with_facts<R: Read, W: Write>(
         .into_iter()
         .partition(|host| should_use_local_detection(host, &parsed.inventory));
 
-    info!("Found {} local hosts and {} remote hosts", local_hosts.len(), remote_hosts.len());
+    info!(
+        "Found {} local hosts and {} remote hosts",
+        local_hosts.len(),
+        remote_hosts.len()
+    );
 
     // Handle localhost hosts directly
     let mut new_facts = HashMap::new();
@@ -55,7 +59,12 @@ pub async fn enrich_with_facts<R: Read, W: Write>(
     }
 
     // Handle remote hosts via SSH
-    let remote_hosts_needing_facts = filter_hosts_needing_facts(&remote_hosts, &cache, config.cache_ttl, config.force_refresh);
+    let remote_hosts_needing_facts = filter_hosts_needing_facts(
+        &remote_hosts,
+        &cache,
+        config.cache_ttl,
+        config.force_refresh,
+    );
 
     info!(
         "Need to gather facts for {} remote hosts via SSH (cache hits: {})",
@@ -149,24 +158,25 @@ fn should_use_local_detection(hostname: &str, inventory: &crate::types::ParsedIn
     ArchitectureFacts::should_use_local_detection(hostname, &host_vars)
 }
 
-fn get_host_vars(parsed_inventory: &crate::types::ParsedInventory, hostname: &str) -> HashMap<String, serde_json::Value> {
+fn get_host_vars(
+    parsed_inventory: &crate::types::ParsedInventory,
+    hostname: &str,
+) -> HashMap<String, serde_json::Value> {
     match &parsed_inventory.hosts {
-        InventoryHosts::Simple(simple_hosts) => {
-            simple_hosts.get(hostname)
-                .and_then(|v| v.as_object())
-                .map(|obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-                .unwrap_or_default()
-        }
-        InventoryHosts::Detailed(detailed_hosts) => {
-            detailed_hosts.get(hostname)
-                .map(|host_entry| host_entry.vars.clone())
-                .unwrap_or_default()
-        }
+        InventoryHosts::Simple(simple_hosts) => simple_hosts
+            .get(hostname)
+            .and_then(|v| v.as_object())
+            .map(|obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+            .unwrap_or_default(),
+        InventoryHosts::Detailed(detailed_hosts) => detailed_hosts
+            .get(hostname)
+            .map(|host_entry| host_entry.vars.clone())
+            .unwrap_or_default(),
     }
 }
 
 fn build_enriched_playbook(
-    mut parsed: ParsedPlaybook,
+    parsed: ParsedPlaybook,
     cache: &FactCache,
     new_facts: &HashMap<String, ArchitectureFacts>,
     cache_ttl: u64,
@@ -210,8 +220,14 @@ fn build_enriched_playbook(
                             } else {
                                 let host_vars = get_host_vars(&parsed.inventory, host);
                                 if ArchitectureFacts::should_use_local_detection(host, &host_vars) {
-                                    info!("Using local system detection for host {} in group {}", host, group_name);
-                                    host_facts.insert(host.clone(), ArchitectureFacts::from_local_system());
+                                    info!(
+                                        "Using local system detection for host {} in group {}",
+                                        host, group_name
+                                    );
+                                    host_facts.insert(
+                                        host.clone(),
+                                        ArchitectureFacts::from_local_system(),
+                                    );
                                 } else {
                                     warn!(
                                         "No facts available for host {} in group {}, using fallback",
@@ -237,8 +253,14 @@ fn build_enriched_playbook(
                             } else {
                                 let host_vars = get_host_vars(&parsed.inventory, host);
                                 if ArchitectureFacts::should_use_local_detection(host, &host_vars) {
-                                    info!("Using local system detection for host {} in group {}", host, group_name);
-                                    host_facts.insert(host.clone(), ArchitectureFacts::from_local_system());
+                                    info!(
+                                        "Using local system detection for host {} in group {}",
+                                        host, group_name
+                                    );
+                                    host_facts.insert(
+                                        host.clone(),
+                                        ArchitectureFacts::from_local_system(),
+                                    );
                                 } else {
                                     warn!(
                                         "No facts available for host {} in group {}, using fallback",
@@ -259,10 +281,12 @@ fn build_enriched_playbook(
         host_facts,
     };
 
-    parsed.inventory = enriched_inventory.base.clone();
-
     Ok(EnrichedPlaybook {
-        playbook: parsed,
+        metadata: parsed.metadata,
+        plays: parsed.plays,
+        variables: parsed.variables,
+        facts_required: parsed.facts_required,
+        vault_ids: parsed.vault_ids,
         inventory: enriched_inventory,
     })
 }
@@ -270,7 +294,7 @@ fn build_enriched_playbook(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{ParsedInventory, PlaybookMetadata, InventoryHosts, InventoryGroups};
+    use crate::types::{InventoryGroups, InventoryHosts, ParsedInventory, PlaybookMetadata};
     use std::io::Cursor;
 
     fn create_test_playbook() -> ParsedPlaybook {
@@ -302,8 +326,7 @@ mod tests {
             inventory: ParsedInventory {
                 hosts: InventoryHosts::Simple(hosts),
                 groups: InventoryGroups::Simple(groups),
-                host_vars: HashMap::new(),
-                variables: None,
+                variables: HashMap::new(),
             },
         }
     }
@@ -337,8 +360,7 @@ mod tests {
             inventory: ParsedInventory {
                 hosts: InventoryHosts::Simple(HashMap::new()),
                 groups: InventoryGroups::Simple(HashMap::new()),
-                host_vars: HashMap::new(),
-                variables: None,
+                variables: HashMap::new(),
             },
         };
 

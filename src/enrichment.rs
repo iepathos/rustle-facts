@@ -25,7 +25,8 @@ pub async fn enrich_with_facts<R: Read, W: Write>(
         .map_err(|e| FactsError::InvalidInventory(format!("Failed to parse input JSON: {e}")))?;
 
     let hosts = extract_unique_hosts(&parsed)?;
-    info!("Found {} unique hosts in inventory", hosts.len());
+    let total_hosts = hosts.len();
+    info!("Found {} unique hosts in inventory", total_hosts);
 
     let mut cache = if !config.no_cache {
         load_or_create_cache(&config.cache_file)?
@@ -37,20 +38,35 @@ pub async fn enrich_with_facts<R: Read, W: Write>(
         cache.cleanup_stale(config.cache_ttl);
     }
 
-    let hosts_needing_facts =
-        filter_hosts_needing_facts(&hosts, &cache, config.cache_ttl, config.force_refresh);
+    // Separate localhost and remote hosts
+    let (local_hosts, remote_hosts): (Vec<String>, Vec<String>) = hosts
+        .into_iter()
+        .partition(|host| should_use_local_detection(host, &parsed.inventory));
+
+    info!("Found {} local hosts and {} remote hosts", local_hosts.len(), remote_hosts.len());
+
+    // Handle localhost hosts directly
+    let mut new_facts = HashMap::new();
+    for host in &local_hosts {
+        if config.force_refresh || cache.get(host, config.cache_ttl).is_none() {
+            info!("Using direct local detection for host {}", host);
+            new_facts.insert(host.clone(), ArchitectureFacts::from_local_system());
+        }
+    }
+
+    // Handle remote hosts via SSH
+    let remote_hosts_needing_facts = filter_hosts_needing_facts(&remote_hosts, &cache, config.cache_ttl, config.force_refresh);
 
     info!(
-        "Need to gather facts for {} hosts (cache hits: {})",
-        hosts_needing_facts.len(),
-        hosts.len() - hosts_needing_facts.len()
+        "Need to gather facts for {} remote hosts via SSH (cache hits: {})",
+        remote_hosts_needing_facts.len(),
+        remote_hosts.len() - remote_hosts_needing_facts.len()
     );
 
-    let new_facts = if !hosts_needing_facts.is_empty() {
-        gather_minimal_facts(&hosts_needing_facts, config).await?
-    } else {
-        HashMap::new()
-    };
+    if !remote_hosts_needing_facts.is_empty() {
+        let ssh_facts = gather_minimal_facts(&remote_hosts_needing_facts, config).await?;
+        new_facts.extend(ssh_facts);
+    }
 
     update_cache(&mut cache, &new_facts)?;
 
@@ -66,9 +82,9 @@ pub async fn enrich_with_facts<R: Read, W: Write>(
     let duration = start.elapsed();
 
     Ok(EnrichmentReport {
-        total_hosts: hosts.len(),
+        total_hosts,
         facts_gathered: new_facts.len(),
-        cache_hits: hosts.len() - new_facts.len(),
+        cache_hits: total_hosts - new_facts.len(),
         duration,
     })
 }
@@ -126,6 +142,11 @@ fn extract_unique_hosts(playbook: &ParsedPlaybook) -> Result<Vec<String>> {
     }
 
     Ok(hosts)
+}
+
+fn should_use_local_detection(hostname: &str, inventory: &crate::types::ParsedInventory) -> bool {
+    let host_vars = get_host_vars(inventory, hostname);
+    ArchitectureFacts::should_use_local_detection(hostname, &host_vars)
 }
 
 fn get_host_vars(parsed_inventory: &crate::types::ParsedInventory, hostname: &str) -> HashMap<String, serde_json::Value> {

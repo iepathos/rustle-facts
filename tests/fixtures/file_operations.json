@@ -2,7 +2,7 @@
   "metadata": {
     "file_path": "tests/fixtures/playbooks/file_operations_playbook.yml",
     "version": null,
-    "created_at": "2025-07-13T23:47:20.724308Z",
+    "created_at": "2025-07-14T00:14:54.955779Z",
     "checksum": "b1933318bc7de39072bbf4d3ff26c229d989fb5f9ac8673b3738e9b3e0f6aa3d"
   },
   "plays": [
@@ -18,10 +18,10 @@
           "name": "Create base directory structure",
           "module": "file",
           "args": {
-            "state": "directory",
             "path": "/tmp/rustle_file_test",
+            "mode": "0755",
             "recurse": true,
-            "mode": "0755"
+            "state": "directory"
           },
           "vars": {},
           "when": null,
@@ -44,9 +44,9 @@
           "name": "Create subdirectories",
           "module": "file",
           "args": {
+            "state": "directory",
             "mode": "0750",
-            "path": "/tmp/rustle_file_test/",
-            "state": "directory"
+            "path": "/tmp/rustle_file_test/"
           },
           "vars": {},
           "when": null,
@@ -69,10 +69,10 @@
           "name": "Copy configuration file",
           "module": "copy",
           "args": {
-            "dest": "/tmp/rustle_file_test/config/app.conf",
             "mode": "0644",
+            "backup": true,
             "src": "tests/fixtures/files/test_files/sample.conf",
-            "backup": true
+            "dest": "/tmp/rustle_file_test/config/app.conf"
           },
           "vars": {},
           "when": null,
@@ -91,8 +91,8 @@
           "module": "file",
           "args": {
             "state": "touch",
-            "path": "/tmp/rustle_file_test/logs/app.log",
-            "mode": "0664"
+            "mode": "0664",
+            "path": "/tmp/rustle_file_test/logs/app.log"
           },
           "vars": {},
           "when": null,
@@ -110,9 +110,9 @@
           "name": "Create symbolic link",
           "module": "file",
           "args": {
-            "state": "link",
+            "src": "/tmp/rustle_file_test/config/app.conf",
             "dest": "/tmp/rustle_file_test/current.conf",
-            "src": "/tmp/rustle_file_test/config/app.conf"
+            "state": "link"
           },
           "vars": {},
           "when": "ansible_system != \"Windows\"",
@@ -149,7 +149,17 @@
         "groups": [
           "single_host",
           "all"
-        ]
+        ],
+        "connection": "local",
+        "ssh_private_key_file": null,
+        "ssh_common_args": null,
+        "ssh_extra_args": null,
+        "ssh_pipelining": null,
+        "connection_timeout": null,
+        "ansible_become": null,
+        "become_method": null,
+        "become_user": null,
+        "become_flags": null
       }
     },
     "groups": {

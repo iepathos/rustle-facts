@@ -1,0 +1,122 @@
+{
+  "metadata": {
+    "file_path": "tests/fixtures/playbooks/docker_test_playbook.yml",
+    "version": null,
+    "created_at": "2025-07-15T00:36:04.425691Z",
+    "checksum": "test"
+  },
+  "plays": [
+    {
+      "name": "Test Docker connection",
+      "hosts": "all",
+      "vars": {},
+      "tasks": [
+        {
+          "id": "task_0",
+          "name": "Test task",
+          "module": "debug",
+          "args": {
+            "msg": "Hello from Docker"
+          },
+          "vars": {},
+          "when": null,
+          "loop_items": null,
+          "tags": [],
+          "notify": [],
+          "changed_when": null,
+          "failed_when": null,
+          "ignore_errors": false,
+          "delegate_to": null,
+          "dependencies": []
+        }
+      ],
+      "handlers": [],
+      "roles": [],
+      "strategy": "linear",
+      "serial": null,
+      "max_fail_percentage": null
+    }
+  ],
+  "variables": {},
+  "facts_required": false,
+  "vault_ids": [],
+  "inventory": {
+    "hosts": {
+      "dockerhost": {
+        "address": "rustle-test-container",
+        "ansible_become": null,
+        "become_flags": null,
+        "become_method": null,
+        "become_user": null,
+        "connection": "docker",
+        "connection_timeout": null,
+        "groups": [
+          "docker",
+          "all"
+        ],
+        "name": "dockerhost",
+        "port": null,
+        "ssh_common_args": null,
+        "ssh_extra_args": null,
+        "ssh_pipelining": null,
+        "ssh_private_key_file": null,
+        "user": null,
+        "vars": {
+          "ansible_connection": "docker",
+          "ansible_host": "rustle-test-container"
+        }
+      },
+      "localhost": {
+        "address": null,
+        "ansible_become": null,
+        "become_flags": null,
+        "become_method": null,
+        "become_user": null,
+        "connection": "local",
+        "connection_timeout": null,
+        "groups": [
+          "local",
+          "all"
+        ],
+        "name": "localhost",
+        "port": null,
+        "ssh_common_args": null,
+        "ssh_extra_args": null,
+        "ssh_pipelining": null,
+        "ssh_private_key_file": null,
+        "user": null,
+        "vars": {
+          "ansible_connection": "local"
+        }
+      }
+    },
+    "groups": {
+      "docker": {
+        "name": "docker",
+        "hosts": [
+          "dockerhost"
+        ],
+        "children": [],
+        "vars": {}
+      },
+      "all": {
+        "name": "all",
+        "hosts": [
+          "dockerhost",
+          "localhost"
+        ],
+        "children": [],
+        "vars": {}
+      },
+      "local": {
+        "name": "local",
+        "hosts": [
+          "localhost"
+        ],
+        "children": [],
+        "vars": {}
+      }
+    },
+    "variables": {}
+  }
+}

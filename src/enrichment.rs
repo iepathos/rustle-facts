@@ -4,8 +4,8 @@ use crate::docker_facts;
 use crate::error::{FactsError, Result};
 use crate::ssh_facts;
 use crate::types::{
-    ArchitectureFacts, EnrichedInventory, EnrichedPlaybook, EnrichmentReport, FactCache,
-    HostEntry, InventoryGroups, InventoryHosts, ParsedPlaybook,
+    ArchitectureFacts, EnrichedInventory, EnrichedPlaybook, EnrichmentReport, FactCache, HostEntry,
+    InventoryGroups, InventoryHosts, ParsedPlaybook,
 };
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -28,11 +28,11 @@ pub async fn enrich_with_facts<R: Read, W: Write>(
     let hosts = extract_unique_hosts(&parsed)?;
     let total_hosts = hosts.len();
     info!("Found {} unique hosts in inventory", total_hosts);
-    
+
     // Debug inventory format
     match &parsed.inventory.hosts {
-        InventoryHosts::Simple(_) => debug!("Using Simple inventory format"),
-        InventoryHosts::Detailed(_) => debug!("Using Detailed inventory format"),
+        InventoryHosts::Simple(_) => info!("Using Simple inventory format"),
+        InventoryHosts::Detailed(_) => info!("Using Detailed inventory format"),
     }
 
     let mut cache = if !config.no_cache {
@@ -50,7 +50,10 @@ pub async fn enrich_with_facts<R: Read, W: Write>(
         .into_iter()
         .map(|host| {
             let entry = get_host_entry(&host, &parsed.inventory);
-            debug!("Created HostEntry for {}: connection={:?}", host, entry.connection);
+            debug!(
+                "Created HostEntry for {}: connection={:?}",
+                host, entry.connection
+            );
             entry
         })
         .collect::<Vec<_>>();
@@ -59,10 +62,13 @@ pub async fn enrich_with_facts<R: Read, W: Write>(
     let mut local_hosts = Vec::new();
     let mut ssh_hosts = Vec::new();
     let mut docker_hosts = Vec::new();
-    
+
     for entry in host_entries {
         let connection_type = get_connection_type(&entry);
-        debug!("Host {} has connection type: {}", entry.name, connection_type);
+        debug!(
+            "Host {} has connection type: {}",
+            entry.name, connection_type
+        );
         match connection_type.as_str() {
             "local" => local_hosts.push(entry),
             "docker" => docker_hosts.push(entry),
@@ -120,7 +126,8 @@ pub async fn enrich_with_facts<R: Read, W: Write>(
     );
 
     if !docker_hosts_needing_facts.is_empty() {
-        let docker_facts = docker_facts::gather_minimal_facts(docker_hosts_needing_facts, config).await?;
+        let docker_facts =
+            docker_facts::gather_minimal_facts(docker_hosts_needing_facts, config).await?;
         new_facts.extend(docker_facts);
     }
 
@@ -200,33 +207,12 @@ fn extract_unique_hosts(playbook: &ParsedPlaybook) -> Result<Vec<String>> {
     Ok(hosts)
 }
 
-
 fn get_host_entry(hostname: &str, inventory: &crate::types::ParsedInventory) -> HostEntry {
     match &inventory.hosts {
-        InventoryHosts::Detailed(detailed_hosts) => {
-            detailed_hosts.get(hostname).cloned().unwrap_or_else(|| {
-                HostEntry {
-                    name: hostname.to_string(),
-                    address: None,
-                    port: None,
-                    user: None,
-                    vars: get_host_vars(inventory, hostname),
-                    groups: vec![],
-                    connection: None,
-                    ssh_private_key_file: None,
-                    ssh_common_args: None,
-                    ssh_extra_args: None,
-                    ssh_pipelining: None,
-                    connection_timeout: None,
-                    ansible_become: None,
-                    become_method: None,
-                    become_user: None,
-                    become_flags: None,
-                }
-            })
-        }
-        InventoryHosts::Simple(_) => {
-            HostEntry {
+        InventoryHosts::Detailed(detailed_hosts) => detailed_hosts
+            .get(hostname)
+            .cloned()
+            .unwrap_or_else(|| HostEntry {
                 name: hostname.to_string(),
                 address: None,
                 port: None,
@@ -243,21 +229,40 @@ fn get_host_entry(hostname: &str, inventory: &crate::types::ParsedInventory) -> 
                 become_method: None,
                 become_user: None,
                 become_flags: None,
-            }
-        }
+            }),
+        InventoryHosts::Simple(_) => HostEntry {
+            name: hostname.to_string(),
+            address: None,
+            port: None,
+            user: None,
+            vars: get_host_vars(inventory, hostname),
+            groups: vec![],
+            connection: None,
+            ssh_private_key_file: None,
+            ssh_common_args: None,
+            ssh_extra_args: None,
+            ssh_pipelining: None,
+            connection_timeout: None,
+            ansible_become: None,
+            become_method: None,
+            become_user: None,
+            become_flags: None,
+        },
     }
 }
 
 fn get_connection_type(host: &HostEntry) -> String {
-    debug!("Checking connection type for host {}: connection field = {:?}, vars = {:?}", 
-        host.name, host.connection, host.vars);
-    
+    debug!(
+        "Checking connection type for host {}: connection field = {:?}, vars = {:?}",
+        host.name, host.connection, host.vars
+    );
+
     // Check explicit connection field
     if let Some(connection) = &host.connection {
         debug!("Using explicit connection field: {}", connection);
         return connection.clone();
     }
-    
+
     // Check ansible_connection in vars
     if let Some(ansible_connection) = host.vars.get("ansible_connection") {
         if let Some(conn_str) = ansible_connection.as_str() {
@@ -265,13 +270,13 @@ fn get_connection_type(host: &HostEntry) -> String {
             return conn_str.to_string();
         }
     }
-    
+
     // Check if it should use local detection
     if ArchitectureFacts::should_use_local_detection(&host.name, &host.vars) {
         debug!("Using local detection for host {}", host.name);
         return "local".to_string();
     }
-    
+
     // Default to SSH
     debug!("Defaulting to SSH for host {}", host.name);
     "ssh".to_string()

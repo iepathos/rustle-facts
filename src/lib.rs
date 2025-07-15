@@ -1,5 +1,6 @@
 pub mod cache;
 pub mod config;
+pub mod docker_facts;
 pub mod enrichment;
 pub mod error;
 pub mod ssh_facts;

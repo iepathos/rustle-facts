@@ -1,4 +1,17 @@
 {
+    "hooks": {
+      "Notification": [
+        {
+          "matcher": "",
+          "hooks": [
+            {
+              "type": "command",
+              "command": ".claude/hooks/notification awaiting_input"
+            }
+          ]
+        }
+      ]
+    },
     "permissions": {
       "allow": [
         "Bash(cargo build:*)",
@@ -66,7 +79,8 @@
         "Bash(time:*)",
         "Bash(jq:*)",
         "Bash(cargo deny check:*)",
-        "WebFetch(domain:rust-lang.github.io)"
+        "WebFetch(domain:rust-lang.github.io)",
+        "Bash(cargo expand:*)"
       ],
       "deny": []
     }

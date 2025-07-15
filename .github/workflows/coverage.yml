@@ -33,6 +33,14 @@ jobs:
           target
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
     
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Verify Docker is running
+      run: |
+        docker --version
+        docker info
+    
     - name: Run tests with coverage
       run: |
         cargo tarpaulin --fail-under 85 --out Lcov --output-dir coverage --timeout 300

@@ -44,6 +44,16 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cargo-
     
+    - name: Set up Docker Buildx
+      if: runner.os != 'Windows'
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Verify Docker is running
+      if: runner.os != 'Windows'
+      run: |
+        docker --version
+        docker info
+    
     - name: Run tests
       run: cargo test --all-features
     

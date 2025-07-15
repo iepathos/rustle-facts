@@ -96,12 +96,30 @@ pub fn plan_execution<R: Read, W: Write>(
     options: &PlanningOptions,
 ) -> Result<(), PlanError>
 
-// Binary deployment decision making
+// Binary deployment decision making with asset analysis
 pub fn analyze_binary_deployment_opportunities(
     tasks: &[TaskPlan],
     hosts: &[String],
     threshold: u32
-) -> Result<Vec<BinaryDeployment>, PlanError>
+) -> Result<Vec<BinaryDeployment>, PlanError> {
+    // Analyze file operations for bundling
+    let file_ops = extract_file_operations(&tasks)?;
+    let asset_size = calculate_total_asset_size(&file_ops)?;
+    
+    // Factor asset bundling into deployment decision
+    let deployment_score = calculate_deployment_score(
+        tasks.len(),
+        hosts.len(),
+        asset_size,
+        network_overhead(&tasks)
+    );
+    
+    if deployment_score > threshold {
+        Ok(plan_binary_deployments(tasks, file_ops)?)
+    } else {
+        Ok(vec![]) // Use SSH execution
+    }
+}
 ```
 
 **Optimization Strategies**:
@@ -120,11 +138,12 @@ pub fn compile_binaries(plan: &DeploymentPlan) -> Result<Vec<BinaryCompilation>,
 pub fn deploy_binaries(plan: &DeploymentPlan) -> Result<DeploymentReport, DeployError>
 
 // Compilation pipeline
-1. Generate Rust source with embedded execution plan
-2. Cross-compile for target architectures (x86_64, ARM64)
-3. Static linking for zero-dependency deployment
-4. Compression and optimization
-5. Secure deployment with integrity verification
+1. Collect all file assets from copy/template/sync operations
+2. Generate Rust source with embedded execution plan and assets
+3. Cross-compile for target architectures (x86_64, ARM64)
+4. Static linking for zero-dependency deployment
+5. Bundle assets with compression and deduplication
+6. Secure deployment with integrity verification
 ```
 
 **Performance Benefits**:
@@ -390,7 +409,7 @@ This separation ensures:
 4. **Performance Modeling**: Predicted >2x speedup after compilation overhead
 
 **Compatible Task Types**:
-- File operations (copy, template, file module)
+- File operations (copy, template, file module) - with asset bundling
 - Package management (yum, apt, package)
 - Service management (service, systemd)
 - Shell commands (shell, command)
@@ -398,7 +417,8 @@ This separation ensures:
 
 **Incompatible Tasks** (automatic SSH fallback):
 - Interactive tasks (pause, prompt)
-- Controller-dependent operations (fetch)
+- Fetch operations (require controller write-back)
+- delegate_to operations (see compatibility strategy below)
 - Real-time operations requiring immediate feedback
 
 ### Binary Compilation Process
@@ -445,6 +465,218 @@ let results = coordinate_binary_execution(&deployments).await?;
 // Note: Architecture/OS facts are determined at compile-time by rustle-facts
 // Runtime facts (memory, disk, etc.) are gathered by the binary on the target
 ```
+
+### File Operations and Asset Bundling Strategy
+
+**Core Innovation**: All file operations are bundled with the binary at deployment time, eliminating network round-trips during execution.
+
+**Asset Bundling Process**:
+```rust
+// During rustle-deploy phase
+pub struct DeploymentBundle {
+    binary: Vec<u8>,
+    assets: HashMap<PathBuf, FileAsset>,
+    total_size: u64,
+}
+
+pub struct FileAsset {
+    content: Vec<u8>,
+    mode: u32,
+    owner: Option<String>,
+    group: Option<String>,
+    checksum: String,
+}
+
+// Asset collection during planning
+pub fn collect_deployment_assets(tasks: &[Task]) -> Result<Vec<FileAsset>, DeployError> {
+    let mut assets = Vec::new();
+    
+    for task in tasks {
+        match task {
+            Task::Copy { src, dest, mode, owner, group, .. } => {
+                let content = std::fs::read(src)?;
+                assets.push(FileAsset {
+                    content,
+                    mode: mode.unwrap_or(0o644),
+                    owner: owner.clone(),
+                    group: group.clone(),
+                    checksum: calculate_sha256(&content),
+                });
+            }
+            Task::Template { src, dest, vars, .. } => {
+                // Templates are pre-rendered during compilation
+                let rendered = render_template_at_compile_time(src, vars)?;
+                assets.push(FileAsset {
+                    content: rendered.into_bytes(),
+                    ..Default::default()
+                });
+            }
+            Task::Synchronize { src, dest, .. } => {
+                // Rsync-style operations bundle entire directory trees
+                let tree_assets = bundle_directory_tree(src, dest)?;
+                assets.extend(tree_assets);
+            }
+            _ => {}
+        }
+    }
+    
+    Ok(assets)
+}
+```
+
+**Performance Benefits**:
+- **Single Deployment**: One transfer containing binary + all assets
+- **Zero Runtime Network**: All files available locally on target
+- **Atomic Operations**: Either all files deploy or none do
+- **Compression**: Assets compressed during bundling
+- **Deduplication**: Identical files shared across tasks
+
+**Size Management**:
+```rust
+// Smart bundling decisions based on size
+pub fn optimize_asset_bundling(assets: &[FileAsset]) -> BundlingStrategy {
+    let total_size: u64 = assets.iter().map(|a| a.content.len() as u64).sum();
+    
+    match total_size {
+        0..=50_000_000 => BundlingStrategy::EmbedAll,           // < 50MB: embed everything
+        50_000_001..=200_000_000 => BundlingStrategy::Compress, // 50-200MB: aggressive compression
+        _ => BundlingStrategy::StreamingDeploy,                 // > 200MB: stream assets separately
+    }
+}
+```
+
+### Delegate Pattern Compatibility Strategy
+
+**Design Decision**: Rustle treats `delegate_to` as an anti-pattern that breaks performance optimization and encourages better playbook design.
+
+**Compatibility Levels**:
+
+1. **delegate_to: localhost** - Supported with Warning
+   ```yaml
+   # Discouraged pattern
+   - name: Check API from controller
+     uri: url=http://api.example.com
+     delegate_to: localhost
+     
+   # Recommended alternative
+   - name: Pre-flight checks
+     hosts: localhost
+     tasks:
+       - uri: url=http://api.example.com
+   ```
+
+2. **delegate_to: other_host** - Not Supported in Binary Mode
+   ```rust
+   // In rustle-plan
+   pub enum DelegateStrategy {
+       WarnAndFallback,     // Log warning, use SSH execution
+       ErrorAndHalt,        // Refuse to continue
+       RefactoringSuggestion, // Provide migration guidance
+   }
+   
+   pub fn handle_delegate_task(task: &Task) -> Result<ExecutionStrategy, PlanError> {
+       match task {
+           Task::DelegateTo { host: "localhost", .. } => {
+               warn!("delegate_to: localhost is an anti-pattern. Task will execute via SSH.");
+               Ok(ExecutionStrategy::SshOnly)
+           }
+           Task::DelegateTo { host, .. } => {
+               Err(PlanError::UnsupportedPattern(
+                   format!("delegate_to: {} not supported. Refactor into separate plays.", host)
+               ))
+           }
+           _ => Ok(ExecutionStrategy::BinaryCapable)
+       }
+   }
+   ```
+
+**Migration Assistance**:
+```bash
+# Analyze playbook for anti-patterns
+$ rustle analyze-compatibility playbook.yml
+
+⚠️  3 instances of delegate_to: localhost found
+   Line 42: API health check - Move to pre-flight play
+   Line 73: Generate local report - Use local_action instead
+   Line 91: Update inventory - Consider separate controller play
+
+❌ 1 instance of delegate_to: other_host found
+   Line 105: Cross-host coordination - Refactor using host groups
+
+Suggested refactoring available: rustle refactor --fix-delegates playbook.yml
+```
+
+### Implementation Details
+
+**Binary Structure with Assets**:
+```rust
+// Generated binary layout
+pub struct TargetBinary {
+    // Header
+    magic: [u8; 8],          // "RUSTLE01"
+    version: u32,
+    asset_table_offset: u64,
+    asset_count: u32,
+    
+    // Executable code
+    executor: Vec<u8>,
+    
+    // Asset table
+    assets: Vec<AssetEntry>,
+    
+    // Asset data (compressed)
+    asset_data: Vec<u8>,
+}
+
+// Runtime asset extraction
+impl TargetBinary {
+    pub fn extract_assets(&self) -> Result<(), ExtractError> {
+        for asset in &self.assets {
+            let data = self.decompress_asset(asset)?;
+            
+            // Atomic file creation
+            let temp_path = format!("{}.tmp", asset.path);
+            std::fs::write(&temp_path, &data)?;
+            
+            // Set permissions
+            set_file_permissions(&temp_path, asset.mode)?;
+            set_file_ownership(&temp_path, &asset.owner, &asset.group)?;
+            
+            // Atomic rename
+            std::fs::rename(&temp_path, &asset.path)?;
+        }
+        Ok(())
+    }
+}
+```
+
+**Execution Flow with Assets**:
+```rust
+// 1. Binary startup
+let binary = TargetBinary::load_self()?;
+
+// 2. Extract all bundled assets
+binary.extract_assets()?;
+
+// 3. Execute tasks (all files already local)
+for task in binary.execution_plan.tasks {
+    match task {
+        Task::Copy { src, dest, .. } => {
+            // File already extracted to dest, just verify
+            verify_file_integrity(dest)?;
+        }
+        Task::Template { dest, .. } => {
+            // Template already rendered and extracted
+            verify_file_integrity(dest)?;
+        }
+        _ => execute_task(task)?,
+    }
+}
+
+// 4. Cleanup if requested
+if binary.config.cleanup_on_exit {
+    binary.cleanup_extracted_assets()?;
+}
 
 ## Error Handling and Resilience
 
@@ -563,14 +795,25 @@ binary_deployment:
     - "database_servers"
   force_ssh_for:
     - "bastion_hosts"
+  asset_bundling:
+    max_bundle_size: "50MB"
+    compression: true
+    deduplication: true
+  
+compatibility:
+  delegate_to_localhost: "warn"    # Options: "warn", "error", "ssh-fallback"
+  delegate_to_other: "error"        # Options: "error", "ssh-fallback"
+  fetch_operations: "ssh-fallback"  # Always use SSH for fetch
   
 optimization:
   enable_compilation_cache: true
   parallel_compilation_jobs: 8
+  analyze_anti_patterns: true       # Warn about delegate_to usage
   
 monitoring:
   enable_performance_tracking: true
   report_binary_deployment_savings: true
+  track_asset_bundle_efficiency: true
 ```
 
 ## Future Enhancements
